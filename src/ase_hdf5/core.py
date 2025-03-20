@@ -25,8 +25,16 @@ class ASEH5Trajectory:
         info_keys
             List of per-frame info keys to write to the HDF5 file.
         """
-        self.immutable = set(immutable or ["numbers"])
-        self.mutable = set(mutable or ["positions"])
+
+        default_immutable = ["numbers"]
+        default_mutable = ["positions"]
+
+        # merge defaults with provided lists
+        immutable = (immutable or []) + default_immutable
+        mutable = (mutable or []) + default_mutable
+
+        # Validate keys
+        self.immutable, self.mutable = validate_keys(immutable, mutable)
         self.info_keys = info_keys or []
 
     def write(self, atoms_list: list[ase.Atoms], filename: Path | str) -> None:
@@ -56,6 +64,7 @@ class ASEH5Trajectory:
         ValueError
             If a mutable property is missing in any frame.
         """
+
         filename = Path(filename)
 
         with h5py.File(filename, "w") as h5file:
@@ -198,6 +207,47 @@ class ASEH5Trajectory:
 
 
 ########## HELPER FUNCTIONS ##########
+
+
+def validate_keys(
+    immutable: list[str] | None, mutable: list[str] | None
+) -> tuple[set[str], set[str]]:
+    """
+    Ensure there are no repeated keys in both immutable and mutable. If
+    'numbers' appears in mutable, remove it from immutable. If 'positions'
+    appears in immutable, remove it from mutable.
+
+    Parameters
+    ----------
+    immutable
+        List of immutable properties.
+    mutable
+        List of mutable properties.
+
+    Returns
+    -------
+    Validated sets of immutable and mutable properties.
+    """
+
+    immutable_set = set(immutable or [])
+    mutable_set = set(mutable or [])
+
+    # Ensure 'numbers' and 'positions' are correctly placed.
+    if "numbers" in mutable_set:
+        immutable_set.discard("numbers")
+
+    if "positions" in immutable_set:
+        mutable_set.discard("positions")
+
+    # Now remove common keys
+    common_keys = immutable_set & mutable_set
+    if common_keys:
+        raise ValueError(
+            "Conflicting keys found in both immutable and mutable: "
+            + ", ".join([f"'{x}'" for x in common_keys])
+        )
+
+    return immutable_set, mutable_set
 
 
 def check_immutable_consistency(atoms_list, key, data):

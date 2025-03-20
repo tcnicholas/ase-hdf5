@@ -2,7 +2,7 @@ import ase
 import numpy as np
 import pytest
 
-from ase_hdf5.core import ASEH5Trajectory
+from ase_hdf5.core import ASEH5Trajectory, validate_keys
 
 
 @pytest.fixture(params=["immutable_cell", "mutable_cell"])
@@ -212,3 +212,34 @@ def test_missing_immutable_property(tmp_path):
         ValueError, match="Immutable property 'framework' missing in frame 1."
     ):
         traj.write(atoms_list, test_file)
+
+
+def test_conflicting_keys():
+    """
+    Test if validate_keys raises an error for duplicate keys in immutable and
+    mutable.
+    """
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Conflicting keys found in both immutable and mutable: 'shared_key'"
+        ),
+    ):
+        validate_keys(["shared_key"], ["shared_key"])
+
+
+def test_numbers_in_mutable():
+    """Test if 'numbers' in mutable is removed from immutable."""
+
+    immutable, mutable = validate_keys(["numbers"], ["numbers", "extra"])
+    assert "numbers" not in immutable
+    assert "extra" in mutable  # Ensure other mutable keys are still there
+
+
+def test_positions_in_immutable():
+    """Test if 'positions' in immutable is removed from mutable."""
+
+    immutable, mutable = validate_keys(["positions", "extra"], ["positions"])
+    assert "positions" not in mutable
+    assert "extra" in immutable  # Ensure other immutable keys are still there
