@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ase-hdf5"
+version = "0.1.0"
+description = "Reading and writing ASE trajectories to HDF5 files."
+readme = "README.md"
+authors = [{ name = "Thomas C Nicholas", email = "tcnicholas@me.com" }]
+license = { file = "LICENSE.md" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "ase>=3.23.0",
+    "h5py>=3.11.0",
+]
+requires-python = ">=3.8"
+
+[tool.setuptools]
+packages = ["ase_hdf5"]
+package-dir = {"" = "src"}
+
+[project.optional-dependencies]
+tests = ["pytest", "pytest-cov"]
+dev = ["bumpver", "ruff"]
+publish = ["twine", "build"]
+
+[tool.bumpver]
+current_version = "0.0.26"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump {old_version} -> {new_version}"
+commit = true
+tag = true
+push = false
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = ['current_version = "{version}"', 'version = "{version}"']
+"src/ase_hdf5/__init__.py" = ["{version}"]
+
+[tool.ruff]
+line-length = 80
+indent-width = 4
+target-version = "py38"
+extend-include = ["*.ipynb", "*.pyi", "*.toml"]
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "B", "SIM", "I"]
+ignore = ["SIM300", "E402", "E703", "F722", "UP037", "F821", "B018", "E741"]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.coverage.paths]
+source = ["src", "*/site-packages"]
+
+[tool.coverage.run]
+branch = true
+source = ["ase_hdf5"]
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+]
+
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py", "tests.py"]
+addopts = "--cov=ase_hdf5 --cov-report=xml --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "bumpver>=2024.1130",
+    "notebook>=7.3.2",
+ "ruff",
+ "sphinx-autobuild",
+]
