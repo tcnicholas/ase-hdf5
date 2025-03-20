@@ -1,4 +1,4 @@
-# `ase-hdf5` - simple reading and writing of list[ase.Atoms] objects
+# `ase-hdf5` - simple I/O for list[ase.Atoms] <-> HDF5
 
 <div align="center">
 
