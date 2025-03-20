@@ -14,15 +14,14 @@ def human_readable_size(size_bytes: int) -> str:
     return f"{size_bytes:.2f} TB"
 
 
-def get_file_size(file_path: Path) -> int:
+def _get_file_size(file_path: Path) -> int:
     """ Get the size of a file in bytes. """
 
     return file_path.stat().st_size
 
 
-def print_file_size(file_path: Path | str) -> None:
-    """ Print the size of a file in a human-readable format. """
+def get_file_size(file_path: Path | str) -> str:
+    """ Get the size of a file in a human-readable format. """
 
-    size_bytes = get_file_size(Path(file_path))
-    size_str = human_readable_size(size_bytes)
-    print(f"File size: {size_str}")
+    size_bytes = _get_file_size(Path(file_path))
+    return human_readable_size(size_bytes)

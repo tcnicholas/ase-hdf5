@@ -1,6 +1,6 @@
 import pytest
 
-from ase_hdf5.utils import get_file_size, human_readable_size, print_file_size
+from ase_hdf5.utils import _get_file_size, get_file_size, human_readable_size
 
 
 @pytest.mark.parametrize(
@@ -30,7 +30,7 @@ def test_get_file_size(tmp_path):
     test_content = "a" * 100
     test_file.write_text(test_content)
 
-    assert get_file_size(test_file) == 100
+    assert _get_file_size(test_file) == 100
 
 
 def test_print_file_size(tmp_path, capsys):
@@ -38,10 +38,8 @@ def test_print_file_size(tmp_path, capsys):
 
     test_file = tmp_path / "test.txt"
 
-    # Write 2048 bytes (2 KB)
+    # Write 2048 bytes (2 KB).
     test_file.write_text("a" * 2048)
+    file_size = get_file_size(test_file)
 
-    print_file_size(test_file)
-
-    captured = capsys.readouterr()
-    assert "File size: 2.00 KB" in captured.out
+    assert "2.00 KB" in file_size
