@@ -146,7 +146,7 @@ wheels = [
 
 [[package]]
 name = "ase-hdf5"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "ase", version = "3.23.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
