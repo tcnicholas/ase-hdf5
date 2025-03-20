@@ -1,4 +1,4 @@
-name: Tests src
+name: Source Code Tests
 on: [push]
 permissions:
     contents: read
