@@ -35,7 +35,7 @@ dev = ["bumpver", "ruff"]
 publish = ["twine", "build"]
 
 [tool.bumpver]
-current_version = "0.0.26"
+current_version = "0.1.0"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump {old_version} -> {new_version}"
 commit = true
@@ -79,7 +79,6 @@ source = ["ase_hdf5"]
 exclude_also = [
     "def __repr__",
 ]
-
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
