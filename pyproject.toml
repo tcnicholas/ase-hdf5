@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ase-hdf5"
-version = "0.1.0"
+version = "0.1.1"
 description = "Reading and writing ASE trajectories to HDF5 files."
 readme = "README.md"
 authors = [{ name = "Thomas C Nicholas", email = "tcnicholas@me.com" }]
@@ -35,7 +35,7 @@ dev = ["bumpver", "ruff"]
 publish = ["twine", "build"]
 
 [tool.bumpver]
-current_version = "0.1.0"
+current_version = "0.1.1"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump {old_version} -> {new_version}"
 commit = true
