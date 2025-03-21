@@ -37,7 +37,13 @@ class ASEH5Trajectory:
         self.immutable, self.mutable = validate_keys(immutable, mutable)
         self.info_keys = info_keys or []
 
-    def write(self, atoms_list: list[ase.Atoms], filename: Path | str) -> None:
+    def write(
+        self,
+        atoms_list: list[ase.Atoms],
+        filename: Path | str,
+        compression: str = "gzip",
+        float_type: str = "float32",
+    ) -> None:
         """
         Write a list of ASE Atoms objects to an HDF5 file.
 
@@ -58,6 +64,8 @@ class ASEH5Trajectory:
             List of ASE Atoms objects to write.
         filename
             Path to the HDF5 file to write to.
+        compression
+            Compression algorithm to use when writing the HDF5 file.
 
         Raises
         ------
@@ -67,6 +75,8 @@ class ASEH5Trajectory:
 
         filename = Path(filename)
 
+        float_dtype = np.dtype(float_type)
+
         with h5py.File(filename, "w") as h5file:
             first_atoms = atoms_list[0]
 
@@ -75,7 +85,11 @@ class ASEH5Trajectory:
                 data = first_atoms.arrays.get(key, first_atoms.info.get(key))
                 if data is not None:
                     check_immutable_consistency(atoms_list, key, data)
-                    h5file.create_dataset(f"immutable/{key}", data=data)
+                    h5file.create_dataset(
+                        f"immutable/{key}",
+                        data=convert_dtype(data, float_dtype),
+                        compression=compression,
+                    )
                 else:
                     raise ValueError(
                         f"Immutable property '{key}' missing in frame 1."
@@ -90,16 +104,26 @@ class ASEH5Trajectory:
                         raise ValueError(
                             f"Mutable property '{key}' missing in a frame."
                         )
-                    frame_data.append(data)
+                    frame_data.append(convert_dtype(data, float_dtype))
                 stacked_data = np.stack(frame_data, axis=0)
-                h5file.create_dataset(f"mutable/{key}", data=stacked_data)
+                h5file.create_dataset(
+                    f"mutable/{key}", data=stacked_data, compression=compression
+                )
 
             # get the cell data.
-            cells = np.stack([atoms.cell.array for atoms in atoms_list], axis=0)
+            cells = np.stack(
+                [atoms.cell.array for atoms in atoms_list],
+                axis=0,
+                dtype=float_dtype,
+            )
             if np.all(np.isclose(cells, cells[0])):
-                h5file.create_dataset("immutable/cell", data=cells[0])
+                h5file.create_dataset(
+                    "immutable/cell", data=cells[0], compression=compression
+                )
             else:
-                h5file.create_dataset("mutable/cell", data=cells)
+                h5file.create_dataset(
+                    "mutable/cell", data=cells, compression=compression
+                )
 
             # other per-frame info.
             for key in self.info_keys:
@@ -110,7 +134,9 @@ class ASEH5Trajectory:
                     warnings.warn(
                         f"Some frames missing '{key}' info.", stacklevel=2
                     )
-                h5file.create_dataset(f"info/{key}", data=data)
+                h5file.create_dataset(
+                    f"info/{key}", data=data, compression=compression
+                )
 
     def read(self, filename: Path | str) -> list[ase.Atoms]:
         """
@@ -132,16 +158,19 @@ class ASEH5Trajectory:
         atoms_list = []
         with h5py.File(filename, "r") as h5file:
             immutable_data = {
-                key: np.array(val) for key, val in h5file["immutable"].items()
+                key: decode_bytes(np.array(val))
+                for key, val in h5file["immutable"].items()
             }
             mutable_data = {
-                key: np.array(val) for key, val in h5file["mutable"].items()
+                key: decode_bytes(np.array(val))
+                for key, val in h5file["mutable"].items()
             }
 
             info_data = {}
             if "info" in h5file:
                 info_data = {
-                    key: np.array(val) for key, val in h5file["info"].items()
+                    key: decode_bytes(np.array(val))
+                    for key, val in h5file["info"].items()
                 }
 
             num_frames = next(iter(mutable_data.values())).shape[0]
@@ -160,7 +189,12 @@ class ASEH5Trajectory:
                     else immutable_data.get("cell")
                 )
 
+                cell = cell if cell.sum() != 0 else None
+
                 atoms = ase.Atoms(positions=arrays.pop("positions"), cell=cell)
+
+                if cell is not None:
+                    atoms.pbc = True
 
                 for key, val in arrays.items():
                     atoms.arrays[key] = val
@@ -250,10 +284,11 @@ def validate_keys(
     return immutable_set, mutable_set
 
 
-def check_immutable_consistency(atoms_list, key, data):
+def check_immutable_consistency(atoms_list, key, data) -> None:
     """
     Check if an immutable property changes between frames.
     """
+
     for atoms in atoms_list[1:]:
         new_data = atoms.arrays.get(key, atoms.info.get(key))
         if new_data is not None and not np.array_equal(data, new_data):
@@ -262,3 +297,64 @@ def check_immutable_consistency(atoms_list, key, data):
                 stacklevel=2,
             )
             break
+
+
+def convert_dtype(
+    data: np.ndarray | float, float_dtype: np.dtype
+) -> np.ndarray | float:
+    """
+    Convert data to the specified float dtype if it's of float type.
+    For unicode strings, convert to fixed-length byte strings.
+    Otherwise, return as-is.
+
+    Parameters
+    ----------
+    data
+        Input data (scalar or np.ndarray).
+    float_dtype
+        Target float dtype (e.g., np.float32 or np.dtype("float32")).
+
+    Returns
+    -------
+    Converted data or original data.
+    """
+
+    if isinstance(data, np.ndarray):
+        if np.issubdtype(data.dtype, np.floating):
+            return data.astype(float_dtype)
+        elif np.issubdtype(data.dtype, np.str_):
+            itemsize = data.dtype.itemsize  # Number of bytes per char * length
+            str_len = itemsize // np.dtype("U1").itemsize
+            return data.astype(f"S{str_len}")
+        else:
+            return data
+    elif isinstance(data, (float, np.floating)):
+        return float_dtype(data)
+    else:
+        return data
+
+
+def decode_bytes(data: np.ndarray) -> np.ndarray:
+    """
+    Decode a NumPy byte string array (dtype='S') to a Unicode string array
+    (dtype='U').
+
+    Parameters
+    ----------
+    data
+        The array to decode.
+
+    Returns
+    -------
+    Decoded array if input was byte string array; otherwise, return as-is.
+    """
+
+    if (
+        isinstance(data, np.ndarray)
+        and np.issubdtype(data.dtype, np.bytes_)
+        and data.ndim > 0
+        and data.dtype.kind == "S"
+    ):
+        return data.astype(str)
+
+    return data

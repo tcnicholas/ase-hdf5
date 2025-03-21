@@ -2,7 +2,12 @@ import ase
 import numpy as np
 import pytest
 
-from ase_hdf5.core import ASEH5Trajectory, validate_keys
+from ase_hdf5.core import (
+    ASEH5Trajectory,
+    convert_dtype,
+    decode_bytes,
+    validate_keys,
+)
 
 
 @pytest.fixture(params=["immutable_cell", "mutable_cell"])
@@ -51,8 +56,8 @@ def test_write_and_read(tmp_path, sample_atoms_list):
     assert len(read_atoms_list) == len(sample_atoms_list)
     for orig, read in zip(sample_atoms_list, read_atoms_list):
         np.testing.assert_array_equal(orig.numbers, read.numbers)
-        np.testing.assert_array_equal(orig.positions, read.positions)
-        np.testing.assert_array_equal(orig.cell.array, read.cell.array)
+        np.testing.assert_allclose(orig.positions, read.positions)
+        np.testing.assert_allclose(orig.cell.array, read.cell.array)
 
 
 def test_immutable_property_warning(tmp_path, sample_atoms_list):
@@ -168,7 +173,7 @@ def test_immutable_property_handling(tmp_path):
     assert len(read_atoms_list) == len(atoms_list)
     for orig, read in zip(atoms_list, read_atoms_list):
         np.testing.assert_array_equal(orig.numbers, read.numbers)
-        np.testing.assert_array_equal(orig.positions, read.positions)
+        np.testing.assert_allclose(orig.positions, read.positions)
 
         # Check framework existence
         if "framework" in orig.arrays:
@@ -243,3 +248,128 @@ def test_positions_in_immutable():
     immutable, mutable = validate_keys(["positions", "extra"], ["positions"])
     assert "positions" not in mutable
     assert "extra" in immutable  # Ensure other immutable keys are still there
+
+
+def test_read_no_cell_sets_no_pbc(tmp_path):
+    """Ensure that if no cell is found, pbc is not set."""
+
+    # create a valid file with all data *except* the cell.
+    test_file = tmp_path / "no_cell.h5"
+    atoms = ase.Atoms("H2O", positions=[[0, 0, 0], [0.8, 0, 0], [-0.4, 0.7, 0]])
+
+    # write to file.
+    traj = ASEH5Trajectory(immutable=["numbers"], mutable=["positions"])
+    traj.write([atoms], test_file)
+
+    # read back and test.
+    atoms_list = traj.read(test_file)
+    assert len(atoms_list) == 1
+    assert not atoms_list[0].pbc.any()  # pbc should not be set.
+
+
+########## TEST CONVERSIONS ##########
+
+
+def test_convert_float_scalar():
+    val = 3.14
+    result = convert_dtype(val, np.float32)
+    assert isinstance(result, np.float32)
+    assert result == np.float32(3.14)
+
+
+def test_convert_float_array():
+    arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype == np.float32
+    np.testing.assert_allclose(result, arr, rtol=1e-6)
+
+
+def test_convert_int_scalar():
+    val = 42
+    result = convert_dtype(val, np.float32)
+    assert isinstance(result, int)  # Should remain unchanged
+    assert result == 42
+
+
+def test_convert_int_array():
+    arr = np.array([1, 2, 3], dtype=np.int32)
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype == np.int32  # Should remain unchanged
+    np.testing.assert_array_equal(result, arr)
+
+
+def test_convert_string_array():
+    arr = np.array(["H", "C", "O"])
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype.type is np.bytes_
+    expected = np.array([b"H", b"C", b"O"])
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_convert_object_array():
+    arr = np.array([1, "H", 3.0], dtype=object)
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype == object
+    assert result.tolist() == arr.tolist()
+
+
+def test_convert_empty_float_array():
+    arr = np.array([], dtype=np.float64)
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype == np.float32
+    assert result.size == 0
+
+
+def test_convert_empty_int_array():
+    arr = np.array([], dtype=np.int64)
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype == np.int64
+    assert result.size == 0
+
+
+def test_convert_already_correct_dtype():
+    arr = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    result = convert_dtype(arr, np.float32)
+    assert result.dtype == np.float32
+    np.testing.assert_array_equal(result, arr)
+
+
+def test_decode_byte_string_array():
+    byte_array = np.array([b"H", b"O", b"C"], dtype="S1")
+    result = decode_bytes(byte_array)
+    
+    assert result.dtype.kind == "U"  # Unicode
+    assert result.dtype.itemsize >= 1
+    assert result.tolist() == ["H", "O", "C"]
+
+
+def test_unicode_string_array_unchanged():
+    str_array = np.array(["H", "O", "C"], dtype="U1")
+    result = decode_bytes(str_array)
+    
+    assert result is str_array  # should return original
+    assert result.dtype.kind == "U"
+    assert result.tolist() == ["H", "O", "C"]
+
+
+def test_numeric_array_unchanged():
+    float_array = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    result = decode_bytes(float_array)
+
+    assert result is float_array
+    np.testing.assert_array_equal(result, float_array)
+
+
+def test_empty_byte_array():
+    empty = np.array([], dtype="S1")
+    result = decode_bytes(empty)
+
+    assert result.dtype.kind == "U"
+    assert result.size == 0
+
+
+def test_non_ndarray_input():
+    data = [b"H", b"O", b"C"]
+    result = decode_bytes(data)
+
+    assert result == data  # unchanged
